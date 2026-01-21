@@ -71,7 +71,7 @@ jobs:
     needs: [sca-safety, sast-bandit, secrets-gitleaks]
     services:
       pygoat-app:
-        image: pygoat/pygoat:latest  # Official Docker image
+        image: pygoat/pygoat:latest
         ports:
           - 8000:8000
         options: >-
@@ -85,19 +85,21 @@ jobs:
       - name: Wait for PyGoat to start
         run: |
           for i in {1..20}; do
-            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 | grep -q "200\|302"; then
-              echo "PyGoat is ready!"
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000 || echo "000")
+            if echo "$http_code" | grep -q "200\|302\|301"; then
+              echo "PyGoat is ready! (HTTP $http_code)"
               exit 0
             fi
             echo "Waiting for PyGoat ($i/20)..."
             sleep 5
           done
-          echo "PyGoat failed to start" && exit 1
+          echo "PyGoat failed to start after 100s" && exit 1
 
       - name: Run OWASP ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.14.0
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: 'http://localhost:8000'
-          cmd_options: '-a -I -m 3'  # Alpha rules, ignore info, 3-min spider
+          cmd_options: '-a -I -m 3'  # Alpha rules + ignore info + 3-min spider
           artifact_name: zap-baseline-report
-          format: html
+          allow_issue_writing: false  # Skip GitHub issue creation
+          token: ${{ secrets.GITHUB_TOKEN }}  # Explicit for clarity
